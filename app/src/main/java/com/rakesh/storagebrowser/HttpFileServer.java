@@ -13,16 +13,18 @@ import javax.net.ssl.SSLServerSocket;
 
 public class HttpFileServer {
     private static final long IDLE_TIMEOUT_NANOS=TimeUnit.MINUTES.toNanos(10);
-    private final Context context; private final File root; private final int port;
+    private final Context context; private final File root;
     private final String pin=String.format(Locale.US,"%06d",new SecureRandom().nextInt(1_000_000));
     private final Set<String> sessions=ConcurrentHashMap.newKeySet(); private volatile boolean running;
     private volatile long lastCommunicationNanos=System.nanoTime();
-    private SSLServerSocket socket; private final ExecutorService pool=Executors.newFixedThreadPool(6);
-    public HttpFileServer(Context c, int port){context=c.getApplicationContext();root=Environment.getExternalStorageDirectory().getAbsoluteFile();this.port=port;}
+    private SSLServerSocket socket; private String lanAddress; private final ExecutorService pool=Executors.newFixedThreadPool(6);
+    public HttpFileServer(Context c){context=c.getApplicationContext();root=Environment.getExternalStorageDirectory().getAbsoluteFile();}
     public String getPin(){return pin;}
+    public int getPort(){if(socket==null||!socket.isBound())throw new IllegalStateException("Server has not started");return socket.getLocalPort();}
+    public String getLanAddress(){if(lanAddress==null)throw new IllegalStateException("Server has not started");return lanAddress;}
     public String getCertificateFingerprint() throws GeneralSecurityException {return TlsIdentity.fingerprint();}
     public boolean isIdle(){return System.nanoTime()-lastCommunicationNanos>=IDLE_TIMEOUT_NANOS;}
-    public String getLanAddress(){
+    private String findLanAddress(){
         try{
             Enumeration<java.net.NetworkInterface> interfaces=java.net.NetworkInterface.getNetworkInterfaces();
             String fallback=null;
@@ -41,7 +43,7 @@ public class HttpFileServer {
             return fallback==null?"127.0.0.1":fallback;
         }catch(Exception e){android.util.Log.e("StorageBrowser","Unable to find a LAN IPv4 address",e);return "127.0.0.1";}
     }
-    public void start() throws IOException,GeneralSecurityException{String address=getLanAddress();if("127.0.0.1".equals(address))throw new IOException("No active LAN IPv4 address found. Connect to Wi-Fi and try again.");socket=(SSLServerSocket)TlsIdentity.create().getServerSocketFactory().createServerSocket(port,50,InetAddress.getByName(address));socket.setEnabledProtocols(Arrays.stream(socket.getSupportedProtocols()).filter(p->p.equals("TLSv1.3")||p.equals("TLSv1.2")).toArray(String[]::new));running=true;new Thread(()->{while(running)try{Socket s=socket.accept();pool.execute(()->handle(s));}catch(IOException e){if(running)android.util.Log.e("StorageBrowser","HTTPS accept failed",e);}},"https-accept").start();}
+    public void start() throws IOException,GeneralSecurityException{String address=findLanAddress();if("127.0.0.1".equals(address))throw new IOException("No active LAN IPv4 address found. Connect to Wi-Fi and try again.");socket=(SSLServerSocket)TlsIdentity.create().getServerSocketFactory().createServerSocket(0,50,InetAddress.getByName(address));socket.setEnabledProtocols(Arrays.stream(socket.getSupportedProtocols()).filter(p->p.equals("TLSv1.3")||p.equals("TLSv1.2")).toArray(String[]::new));lanAddress=socket.getInetAddress().getHostAddress();running=true;new Thread(()->{while(running)try{Socket s=socket.accept();pool.execute(()->handle(s));}catch(IOException e){if(running)android.util.Log.e("StorageBrowser","HTTPS accept failed",e);}},"https-accept").start();}
     public void close(){running=false;try{if(socket!=null)socket.close();}catch(IOException ignored){}pool.shutdownNow();}
     private void handle(Socket s){try(s){javax.net.ssl.SSLSocket tls=(javax.net.ssl.SSLSocket)s;tls.setUseClientMode(false);tls.setSoTimeout(30000);tls.startHandshake();InputStream in=new BufferedInputStream(tls.getInputStream());String first=readLine(in);if(first==null)return;String[] f=first.split(" ");if(f.length<2)return;String method=f[0],target=f[1];Map<String,String> h=new HashMap<>();String line;while((line=readLine(in))!=null&&!line.isEmpty()){int x=line.indexOf(':');if(x>0)h.put(line.substring(0,x).toLowerCase(Locale.ROOT),line.substring(x+1).trim());}OutputStream out=tls.getOutputStream();route(method,target,h,in,out);}catch(Exception e){android.util.Log.w("StorageBrowser","HTTPS request or TLS handshake failed",e);}}
     private String readLine(InputStream in)throws IOException{ByteArrayOutputStream line=new ByteArrayOutputStream();int value;while((value=in.read())!=-1){if(value=='\n')break;if(value!='\r')line.write(value);if(line.size()>8192)throw new IOException("HTTP line too long");}if(value==-1&&line.size()==0)return null;return line.toString(StandardCharsets.ISO_8859_1.name());}

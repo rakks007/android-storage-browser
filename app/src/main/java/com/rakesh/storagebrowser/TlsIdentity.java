@@ -19,7 +19,7 @@ import javax.security.auth.x500.X500Principal;
 
 final class TlsIdentity {
     private static final String KEYSTORE = "AndroidKeyStore";
-    private static final String ALIAS = "storage-browser-tls";
+    private static final String ALIAS = "storage-browser-tls-v2";
 
     private TlsIdentity() {}
 
@@ -40,6 +40,9 @@ final class TlsIdentity {
                     .setCertificateNotBefore(start.getTime())
                     .setCertificateNotAfter(end.getTime())
                     .setDigests(KeyProperties.DIGEST_SHA256)
+                    .setSignaturePaddings(
+                        KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,
+                        KeyProperties.SIGNATURE_PADDING_RSA_PSS)
                     .build());
                 generator.generateKeyPair();
                 keyStore.load(null);

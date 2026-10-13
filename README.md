@@ -1,6 +1,6 @@
 # Android Native Storage Browser
 
-A native Java Android app (version 1.1.0). It browses shared internal storage without requiring the user to select or grant access to a folder. On Android 11 and later, Android settings must grant the app all-files access. The app runs a local HTTPS server with a newly generated PIN each time sharing starts and shows a persistent foreground-service notification. Its self-signed TLS certificate's SHA-256 fingerprint is shown in the app for verification. The interface follows the device's light or dark appearance, including Redmi/Xiaomi system themes.
+A native Java Android app (version 1.1.0). It browses shared internal storage without requiring the user to select or grant access to a folder. On Android 11 and later, Android settings must grant the app all-files access. The app runs a local HTTPS server on an OS-assigned port with a newly generated PIN each time sharing starts and shows a persistent foreground-service notification. The displayed address uses the device's current Wi-Fi IP, which is assigned by the network. Its self-signed TLS certificate's SHA-256 fingerprint is shown in the app for verification. The interface follows the device's light or dark appearance, including Redmi/Xiaomi system themes.
 
 ## Build in Android Studio
 
