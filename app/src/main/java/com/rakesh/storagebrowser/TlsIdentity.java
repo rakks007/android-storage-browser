@@ -12,14 +12,13 @@ import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Calendar;
 import java.util.Locale;
-import javax.net.ssl.SSLEngine;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.X509ExtendedKeyManager;
 import javax.security.auth.x500.X500Principal;
 
 final class TlsIdentity {
     private static final String KEYSTORE = "AndroidKeyStore";
-    private static final String ALIAS = "storage-browser-tls-v2";
+    private static final String ALIAS = "storage-browser-tls-v3";
 
     private TlsIdentity() {}
 
@@ -48,41 +47,21 @@ final class TlsIdentity {
                 keyStore.load(null);
             }
 
-            PrivateKey privateKey = (PrivateKey) keyStore.getKey(ALIAS, null);
-            Certificate[] chain = keyStore.getCertificateChain(ALIAS);
-            if (privateKey == null || chain == null || chain.length == 0
-                || !(chain[0] instanceof X509Certificate)) {
+            if (!(keyStore.getKey(ALIAS, null) instanceof PrivateKey)
+                || !(keyStore.getCertificate(ALIAS) instanceof X509Certificate)) {
                 throw new GeneralSecurityException("TLS server key or certificate is missing");
             }
-            X509Certificate[] certificates = new X509Certificate[chain.length];
-            for (int i = 0; i < chain.length; i++) {
-                if (!(chain[i] instanceof X509Certificate)) {
-                    throw new GeneralSecurityException("TLS certificate chain is invalid");
-                }
-                certificates[i] = (X509Certificate) chain[i];
-            }
-            X509ExtendedKeyManager keyManager = new X509ExtendedKeyManager() {
-                @Override public String[] getClientAliases(String keyType, java.security.Principal[] issuers) { return null; }
-                @Override public String chooseClientAlias(String[] keyTypes, java.security.Principal[] issuers, java.net.Socket socket) { return null; }
-                @Override public String[] getServerAliases(String keyType, java.security.Principal[] issuers) { return supportsRsa(keyType) ? new String[]{ALIAS} : null; }
-                @Override public String chooseServerAlias(String keyType, java.security.Principal[] issuers, java.net.Socket socket) { return supportsRsa(keyType) ? ALIAS : null; }
-                @Override public String chooseEngineClientAlias(String[] keyTypes, java.security.Principal[] issuers, SSLEngine engine) { return null; }
-                @Override public String chooseEngineServerAlias(String keyType, java.security.Principal[] issuers, SSLEngine engine) { return supportsRsa(keyType) ? ALIAS : null; }
-                @Override public X509Certificate[] getCertificateChain(String alias) { return ALIAS.equals(alias) ? certificates.clone() : null; }
-                @Override public PrivateKey getPrivateKey(String alias) { return ALIAS.equals(alias) ? privateKey : null; }
-            };
+            KeyManagerFactory keyManagers = KeyManagerFactory.getInstance(
+                KeyManagerFactory.getDefaultAlgorithm());
+            keyManagers.init(keyStore, null);
             SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(new javax.net.ssl.KeyManager[]{keyManager}, null, null);
+            sslContext.init(keyManagers.getKeyManagers(), null, null);
             return sslContext;
         } catch (java.io.IOException e) {
             throw new GeneralSecurityException("Unable to load the Android keystore", e);
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new GeneralSecurityException("Unable to initialize the TLS identity", e);
         }
-    }
-
-    private static boolean supportsRsa(String keyType) {
-        return "RSA".equalsIgnoreCase(keyType) || "RSASSA-PSS".equalsIgnoreCase(keyType);
     }
 
     static String fingerprint() throws GeneralSecurityException {
