@@ -10,6 +10,8 @@ import android.os.Environment;
 import android.provider.Settings;
 import android.text.InputFilter;
 import android.text.InputType;
+import android.text.method.PasswordTransformationMethod;
+import android.view.View;
 import android.widget.*;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -66,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
         EditText pinInput = new EditText(this);
         pinInput.setHint("6-digit PIN");
         pinInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pinInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
         pinInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(6)});
         pinInput.setSingleLine(true);
 
@@ -77,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
             .create();
         dialog.setCancelable(false);
         dialog.setCanceledOnTouchOutside(false);
+        dialog.setOnDismissListener(ignored -> clearBackgroundBlur());
         dialog.setOnShowListener(ignored -> dialog.getButton(Dialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             if (configuredPin.equals(pinInput.getText().toString())) {
                 dialog.dismiss();
@@ -87,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }));
         dialog.show();
+        blurBackground();
     }
     private void requestNotificationPermission() {
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
@@ -102,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
         EditText pinInput = new EditText(this);
         pinInput.setHint("6-digit PIN");
         pinInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pinInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
         pinInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(6)});
         pinInput.setSingleLine(true);
 
@@ -112,6 +118,7 @@ public class MainActivity extends AppCompatActivity {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Start sharing", null)
             .create();
+        dialog.setOnDismissListener(ignored -> clearBackgroundBlur());
         dialog.setOnShowListener(ignored -> dialog.getButton(Dialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String value = pinInput.getText().toString();
             if (!value.matches("\\d{6}")) {
@@ -123,6 +130,20 @@ public class MainActivity extends AppCompatActivity {
             requestStorageAccess();
         }));
         dialog.show();
+        blurBackground();
+    }
+    private void blurBackground() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            View content = findViewById(android.R.id.content);
+            content.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                18f, 18f, android.graphics.Shader.TileMode.CLAMP));
+        }
+    }
+    private void clearBackgroundBlur() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            View content = findViewById(android.R.id.content);
+            content.setRenderEffect(null);
+        }
     }
     private void requestStorageAccess(){
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
@@ -153,4 +174,5 @@ public class MainActivity extends AppCompatActivity {
     }
     @Override protected void onStart(){super.onStart();registerReceiver(receiver,new IntentFilter(FileServerService.ACTION_STATUS),Context.RECEIVER_NOT_EXPORTED);sendBroadcast(new Intent(FileServerService.ACTION_QUERY).setPackage(getPackageName()));}
     @Override protected void onStop(){super.onStop();unregisterReceiver(receiver);}
+    @Override protected void onDestroy(){clearBackgroundBlur();super.onDestroy();}
 }
