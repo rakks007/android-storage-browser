@@ -21,7 +21,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
     private static final String SETTINGS_NAME = "settings";
     private static final String PIN_KEY = "accessPin";
-    private TextView statusText, urlText, pinText, fingerprintText;
+    private TextView statusText, urlText, pinText;
     private Button start, stop;
     private final ActivityResultLauncher<Intent> accessSettings = registerForActivityResult(
         new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -42,7 +42,6 @@ public class MainActivity extends AppCompatActivity {
             statusText.setText(running ? "Sharing is active" : error == null || error.isEmpty() ? "Sharing is stopped" : "Server error: " + error);
             urlText.setText(running ? i.getStringExtra("url") : "The connection address will appear here.");
             pinText.setText(running ? "PIN: " + i.getStringExtra("pin") : "PIN will appear while sharing is active.");
-            fingerprintText.setText(running ? "Certificate SHA-256:\n" + i.getStringExtra("fingerprint") : "Certificate fingerprint will appear while sharing is active.");
             start.setEnabled(!running); stop.setEnabled(running);
             if (!running && error != null && !error.isEmpty()) Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
         }
@@ -52,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(state); setContentView(R.layout.activity_main);
         statusText=findViewById(R.id.statusText);
         urlText=findViewById(R.id.urlText); pinText=findViewById(R.id.pinText);
-        fingerprintText=findViewById(R.id.fingerprintText);
         start=findViewById(R.id.startServer); stop=findViewById(R.id.stopServer);
         requireAppUnlock();
         start.setOnClickListener(v->startSharing());
