@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="24dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Android Storage Browser" android:textSize="28sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:text="Share a folder with computers and phones on the same trusted Wi-Fi." />
+        <Button android:id="@+id/selectFolder" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="24dp" android:text="Select shared folder" />
+        <TextView android:id="@+id/folderText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" android:text="No folder selected" android:textIsSelectable="true" />
+        <Button android:id="@+id/startServer" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:text="Start sharing" />
+        <Button android:id="@+id/stopServer" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Stop sharing" android:enabled="false" />
+        <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" android:text="Status: stopped" android:textSize="17sp" android:textStyle="bold" />
+        <TextView android:id="@+id/urlText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:textIsSelectable="true" />
+        <TextView android:id="@+id/pinText" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:textIsSelectable="true" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="24dp" android:text="Security: use only on trusted Wi-Fi. The local web connection uses HTTP, not HTTPS. Anyone with the current PIN can browse the selected folder while sharing is active." />
+    </LinearLayout>
+</ScrollView>
