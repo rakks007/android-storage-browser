@@ -36,11 +36,13 @@ public class MainActivity extends AppCompatActivity {
         @Override public void onReceive(Context c, Intent i) {
             if (!FileServerService.ACTION_STATUS.equals(i.getAction())) return;
             boolean running = i.getBooleanExtra("running", false);
-            statusText.setText(running ? "Sharing is active" : "Sharing is stopped");
+            String error = i.getStringExtra("error");
+            statusText.setText(running ? "Sharing is active" : error == null || error.isEmpty() ? "Sharing is stopped" : "Server error: " + error);
             urlText.setText(running ? i.getStringExtra("url") : "The connection address will appear here.");
             pinText.setText(running ? "PIN: " + i.getStringExtra("pin") : "PIN will appear while sharing is active.");
             fingerprintText.setText(running ? "Certificate SHA-256:\n" + i.getStringExtra("fingerprint") : "Certificate fingerprint will appear while sharing is active.");
             start.setEnabled(!running); stop.setEnabled(running);
+            if (!running && error != null && !error.isEmpty()) Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
         }
     };
 

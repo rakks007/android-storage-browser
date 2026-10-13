@@ -23,11 +23,27 @@ public class HttpFileServer {
     public String getCertificateFingerprint() throws GeneralSecurityException {return TlsIdentity.fingerprint();}
     public boolean isIdle(){return System.nanoTime()-lastCommunicationNanos>=IDLE_TIMEOUT_NANOS;}
     public String getLanAddress(){
-        try{Enumeration<java.net.NetworkInterface> ns=java.net.NetworkInterface.getNetworkInterfaces();while(ns.hasMoreElements()){Enumeration<InetAddress> as=ns.nextElement().getInetAddresses();while(as.hasMoreElements()){InetAddress a=as.nextElement();if(!a.isLoopbackAddress()&&a instanceof Inet4Address)return a.getHostAddress();}}}catch(Exception ignored){}return "127.0.0.1";
+        try{
+            Enumeration<java.net.NetworkInterface> interfaces=java.net.NetworkInterface.getNetworkInterfaces();
+            String fallback=null;
+            while(interfaces.hasMoreElements()){
+                java.net.NetworkInterface network=interfaces.nextElement();
+                if(!network.isUp()||network.isLoopback())continue;
+                Enumeration<InetAddress> addresses=network.getInetAddresses();
+                while(addresses.hasMoreElements()){
+                    InetAddress address=addresses.nextElement();
+                    if(address.isLoopbackAddress()||!(address instanceof Inet4Address))continue;
+                    String name=network.getName().toLowerCase(Locale.ROOT);
+                    if(name.startsWith("wlan")||name.contains("wifi"))return address.getHostAddress();
+                    if(fallback==null&&!name.startsWith("tun")&&!name.startsWith("clat"))fallback=address.getHostAddress();
+                }
+            }
+            return fallback==null?"127.0.0.1":fallback;
+        }catch(Exception e){android.util.Log.e("StorageBrowser","Unable to find a LAN IPv4 address",e);return "127.0.0.1";}
     }
-    public void start() throws IOException,GeneralSecurityException{socket=(SSLServerSocket)TlsIdentity.create().getServerSocketFactory().createServerSocket(port);socket.setEnabledProtocols(Arrays.stream(socket.getSupportedProtocols()).filter(p->p.equals("TLSv1.3")||p.equals("TLSv1.2")).toArray(String[]::new));running=true;new Thread(()->{while(running)try{Socket s=socket.accept();pool.execute(()->handle(s));}catch(IOException e){if(running)e.printStackTrace();}},"https-accept").start();}
+    public void start() throws IOException,GeneralSecurityException{String address=getLanAddress();if("127.0.0.1".equals(address))throw new IOException("No active LAN IPv4 address found. Connect to Wi-Fi and try again.");socket=(SSLServerSocket)TlsIdentity.create().getServerSocketFactory().createServerSocket(port,50,InetAddress.getByName(address));socket.setEnabledProtocols(Arrays.stream(socket.getSupportedProtocols()).filter(p->p.equals("TLSv1.3")||p.equals("TLSv1.2")).toArray(String[]::new));running=true;new Thread(()->{while(running)try{Socket s=socket.accept();pool.execute(()->handle(s));}catch(IOException e){if(running)android.util.Log.e("StorageBrowser","HTTPS accept failed",e);}},"https-accept").start();}
     public void close(){running=false;try{if(socket!=null)socket.close();}catch(IOException ignored){}pool.shutdownNow();}
-    private void handle(Socket s){try(s){s.setSoTimeout(30000);InputStream in=new BufferedInputStream(s.getInputStream());String first=readLine(in);if(first==null)return;String[] f=first.split(" ");if(f.length<2)return;String method=f[0],target=f[1];Map<String,String> h=new HashMap<>();String line;while((line=readLine(in))!=null&&!line.isEmpty()){int x=line.indexOf(':');if(x>0)h.put(line.substring(0,x).toLowerCase(Locale.ROOT),line.substring(x+1).trim());}OutputStream out=s.getOutputStream();route(method,target,h,in,out);}catch(Exception ignored){}}
+    private void handle(Socket s){try(s){javax.net.ssl.SSLSocket tls=(javax.net.ssl.SSLSocket)s;tls.setUseClientMode(false);tls.setSoTimeout(30000);tls.startHandshake();InputStream in=new BufferedInputStream(tls.getInputStream());String first=readLine(in);if(first==null)return;String[] f=first.split(" ");if(f.length<2)return;String method=f[0],target=f[1];Map<String,String> h=new HashMap<>();String line;while((line=readLine(in))!=null&&!line.isEmpty()){int x=line.indexOf(':');if(x>0)h.put(line.substring(0,x).toLowerCase(Locale.ROOT),line.substring(x+1).trim());}OutputStream out=tls.getOutputStream();route(method,target,h,in,out);}catch(Exception e){android.util.Log.w("StorageBrowser","HTTPS request or TLS handshake failed",e);}}
     private String readLine(InputStream in)throws IOException{ByteArrayOutputStream line=new ByteArrayOutputStream();int value;while((value=in.read())!=-1){if(value=='\n')break;if(value!='\r')line.write(value);if(line.size()>8192)throw new IOException("HTTP line too long");}if(value==-1&&line.size()==0)return null;return line.toString(StandardCharsets.ISO_8859_1.name());}
     private void route(String method,String target,Map<String,String> headers,InputStream in,OutputStream out)throws Exception{
         URI uri=new URI(target);String path=uri.getPath();Map<String,String> q=query(uri.getRawQuery());
