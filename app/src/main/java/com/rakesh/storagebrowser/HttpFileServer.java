@@ -51,7 +51,7 @@ public class HttpFileServer {
         if(!authorized(headers)){html(out,200,login());return;}
         lastCommunicationNanos=System.nanoTime();
         if(path.equals("/browse")){String browsePath=q.getOrDefault("path","");if(browsePath.isEmpty()){html(out,200,storageOverview());return;}File dir=find(browsePath);if(dir==null||!dir.isDirectory()){html(out,404,page("Folder not found"));return;}html(out,200,browse(dir,browsePath,q.getOrDefault("search",""),parsePage(q.get("page"))));return;}
-        if(path.equals("/download")){File file=find(q.getOrDefault("path",""));if(file==null||!file.isFile()){html(out,404,page("File not found"));return;}download(out,file);return;}
+        if(path.equals("/download")&&(method.equals("GET")||method.equals("HEAD"))){File file=find(q.getOrDefault("path",""));if(file==null||!file.isFile()){html(out,404,page("File not found"));return;}download(out,file,method.equals("HEAD"),headers.get("range"));return;}
         if(path.equals("/upload")&&method.equals("POST")){upload(headers,q,in,out);return;}
         redirect(out,"/browse?path=",null);
     }
@@ -116,11 +116,10 @@ public class HttpFileServer {
         return null;
     }
     private File find(String encoded){
-        String decoded=URLDecoder.decode(encoded,StandardCharsets.UTF_8);
-        StorageRoot root=storageRootForPath(decoded);
+        StorageRoot root=storageRootForPath(encoded);
         if(root==null)return null;
         File current=root.directory;
-        String[] parts=decoded.split("/",-1);
+        String[] parts=encoded.split("/",-1);
         for(int i=1;i<parts.length;i++){
             String part=parts[i];
             if(part.isEmpty()||part.equals(".")||part.equals(".."))return null;
@@ -189,38 +188,100 @@ public class HttpFileServer {
             if(safePage+1<pageCount)listing+="<a href='/browse?path="+enc(current)+"&amp;search="+enc(searchTerm)+"&amp;page="+(safePage+1)+"'>Next</a>";
             listing+="</nav>";
         }
-        String controls="<form id='upload-form' class='upload-form' data-path='"+escape(current)+"'><label for='upload-files'>Add files to this folder</label><input id='upload-files' type='file' multiple required><button type='submit'>Upload files</button><span>Existing files are never overwritten.</span></form>";
+        String controls="<form id='upload-form' class='upload-form' data-path='"+escape(current)+"'><label for='upload-files'>Add files to this folder</label><input id='upload-files' type='file' multiple required><button type='submit'>Upload files</button><span>Existing files are never overwritten. Downloads are saved directly by your browser.</span></form>";
         String progress="<aside id='transfer' class='transfer' role='status' aria-live='polite' hidden><div class='transfer-heading'><strong id='transfer-title'>Transfer</strong><span id='transfer-value'></span></div><progress id='transfer-progress' max='100' value='0'></progress></aside>";
-        String script="<script>(function(){const box=document.getElementById('transfer'),title=document.getElementById('transfer-title'),value=document.getElementById('transfer-value'),bar=document.getElementById('transfer-progress');function show(label,loaded,total){box.hidden=false;title.textContent=label;bar.removeAttribute('value');if(total>0){bar.value=Math.min(100,Math.round(loaded*100/total));value.textContent=bar.value+'%';}else value.textContent='';}function hide(){box.hidden=true;}document.querySelectorAll('.download-link').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const xhr=new XMLHttpRequest();xhr.open('GET',link.href);xhr.responseType='blob';xhr.onprogress=e=>show('Downloading '+link.download,e.loaded,e.lengthComputable?e.total:0);xhr.onload=()=>{if(xhr.status!==200){hide();alert('Download failed. Please try again.');return;}const url=URL.createObjectURL(xhr.response),a=document.createElement('a');a.href=url;a.download=link.download;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);hide();};xhr.onerror=()=>{hide();alert('Download failed. Check the connection and try again.');};show('Downloading '+link.download,0,0);xhr.send();}));const form=document.getElementById('upload-form'),input=document.getElementById('upload-files');form.addEventListener('submit',async event=>{event.preventDefault();const files=[...input.files];if(!files.length)return;const base='/upload?path='+encodeURIComponent(form.dataset.path)+'&name=';let completed=0,total=files.reduce((sum,file)=>sum+file.size,0);for(const file of files){try{await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',base+encodeURIComponent(file.name));xhr.setRequestHeader('Content-Type','application/octet-stream');xhr.upload.onprogress=e=>show('Uploading '+file.name,completed+(e.lengthComputable?e.loaded:0),total);xhr.onload=()=>xhr.status===201?resolve():reject(new Error(xhr.status===409?'A file named '+file.name+' already exists.':'Upload failed for '+file.name+'.'));xhr.onerror=()=>reject(new Error('Upload failed. Check the connection and try again.'));show('Uploading '+file.name,completed,total);xhr.send(file);});completed+=file.size;}catch(error){hide();alert(error.message);location.reload();return;}}show('Upload complete',total,total);setTimeout(()=>location.reload(),600);});})();</script>";
+        String script=uploadScript();
         StorageRoot location=storageRootForPath(current);
         String relative=current.length()>location.id.length()?current.substring(location.id.length()+1):"";
         String displayPath=location.label+(relative.isEmpty()?"":"/"+relative);
         return page("<header><a class='parent' href='/browse?path="+enc(parent)+"'>← Parent folder</a><p class='eyebrow'>STORAGE BROWSER</p><h1>"+escape(location.label)+"</h1><div class='path'>/"+escape(displayPath)+"</div></header>"+controls+search+listing+progress+script);
     }
+    private String uploadScript(){
+        return "<script>(function(){"
+            +"const box=document.getElementById('transfer'),title=document.getElementById('transfer-title'),value=document.getElementById('transfer-value'),bar=document.getElementById('transfer-progress');"
+            +"function show(label,loaded,total){box.hidden=false;title.textContent=label;bar.removeAttribute('value');if(total>0){bar.value=Math.min(100,Math.round(loaded*100/total));value.textContent=bar.value+'%';}else value.textContent='';}"
+            +"function hide(){box.hidden=true;}"
+            +"const form=document.getElementById('upload-form'),input=document.getElementById('upload-files');"
+            +"form.addEventListener('submit',async event=>{event.preventDefault();const files=[...input.files];if(!files.length)return;"
+            +"const base='/upload?path='+encodeURIComponent(form.dataset.path)+'&name=';let completed=0,total=files.reduce((sum,file)=>sum+file.size,0);"
+            +"for(const file of files){try{await new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('POST',base+encodeURIComponent(file.name));xhr.setRequestHeader('Content-Type','application/octet-stream');"
+            +"xhr.upload.onprogress=e=>show('Uploading '+file.name,completed+(e.lengthComputable?e.loaded:0),total);"
+            +"xhr.onload=()=>xhr.status===201?resolve():reject(new Error(xhr.status===409?'A file named '+file.name+' already exists.':'Upload failed for '+file.name+'.'));"
+            +"xhr.onerror=()=>reject(new Error('Upload failed. Check the connection and try again.'));show('Uploading '+file.name,completed,total);xhr.send(file);});completed+=file.size;"
+            +"}catch(error){hide();alert(error.message);location.reload();return;}}"
+            +"show('Upload complete',total,total);setTimeout(()=>location.reload(),600);});})();</script>";
+    }
     private String login(){return page("<h1>Android Storage Browser</h1><p>Enter the six-digit PIN shown in the app.</p><form method='post' action='/login'><input name='pin' type='password' inputmode='numeric' maxlength='6' required autofocus><button>Connect</button></form><p class='warn'>This connection is not encrypted. Use only on a trusted Wi-Fi network.</p>");}
     private String page(String body){
         return "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='color-scheme' content='light dark'><title>Storage Browser</title><style>"
             +":root{color-scheme:light dark;--bg:#f5f5f7;--surface:#fff;--text:#202124;--muted:#686b73;--line:#e4e4e8;--brand:#ff6900}*{box-sizing:border-box}"
-            +"body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}"
-            +"main{width:100%;min-height:100vh;margin:0;padding:clamp(18px,3vw,48px)}header{margin-bottom:24px}"
-            +".eyebrow{margin:26px 0 4px;color:var(--brand);font-size:12px;font-weight:800;letter-spacing:.12em}"
-            +"h1{margin:0;font-size:clamp(28px,4vw,44px);line-height:1.12}.path{margin-top:10px;color:var(--muted);overflow-wrap:anywhere}"
-            +".parent{display:inline-flex;align-items:center;color:var(--brand);text-decoration:none;font-weight:700}"
-            +".toolbar{display:grid;grid-template-columns:1fr auto;gap:7px 16px;margin:20px 0 14px}.toolbar label,.upload-form label{grid-column:1/-1;color:var(--muted);font-size:13px;font-weight:700}"
-            +".toolbar input,.upload-form input{width:100%;min-width:0;min-height:48px;margin:0;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);font:inherit}"
-            +".upload-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;margin:20px 0;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}.upload-form input{grid-column:1}.upload-form button{grid-column:2;grid-row:2}.upload-form span{grid-column:1/-1;color:var(--muted);font-size:13px}"
+            +"body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:12px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif}"
+            +"main{width:100%;min-height:100vh;margin:0;padding:clamp(14px,2.5vw,36px)}header{margin-bottom:18px}"
+            +".eyebrow{margin:20px 0 3px;color:var(--brand);font-size:10px;font-weight:800;letter-spacing:.11em}"
+            +"h1{margin:0;font-size:clamp(17px,2vw,21px);line-height:1.2}.path{margin-top:5px;color:var(--muted);overflow-wrap:anywhere;font-size:11px}"
+            +".parent{display:inline-flex;align-items:center;color:var(--brand);text-decoration:none;font-size:11px;font-weight:700}"
+            +".toolbar{display:grid;grid-template-columns:1fr auto;gap:5px 10px;margin:12px 0 9px}.toolbar label,.upload-form label{grid-column:1/-1;color:var(--muted);font-size:10px;font-weight:700}"
+            +".toolbar input,.upload-form input{width:100%;min-width:0;min-height:32px;margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit}"
+            +".upload-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 9px;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}.upload-form input{grid-column:1}.upload-form button{grid-column:2;grid-row:2}.upload-form span{grid-column:1/-1;color:var(--muted);font-size:10px}"
             +"#result-count{align-self:center;color:var(--muted);white-space:nowrap}.entries{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px}"
-            +".item{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}.item-info{min-width:0}.item b{display:block;overflow-wrap:anywhere}.item small{display:block;margin-top:3px;color:var(--muted)}"
-            +".item a,button{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;text-decoration:none;font:inherit;font-weight:700}"
-            +".result-summary{color:var(--muted);font-size:14px}.pagination{display:flex;justify-content:center;align-items:center;gap:20px;margin:22px 0}.pagination a{color:var(--brand);font-weight:700;text-decoration:none}"
-            +".empty{padding:24px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);text-align:center}.transfer{position:fixed;z-index:5;right:20px;bottom:20px;width:min(380px,calc(100vw - 40px));padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:0 10px 36px #0003}.transfer-heading{display:flex;justify-content:space-between;gap:12px;margin-bottom:9px}.transfer progress{width:100%;height:9px;accent-color:var(--brand)}"
+            +".item{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}.item-info{min-width:0}.item b{display:block;overflow-wrap:anywhere;font-size:12px}.item small{display:block;margin-top:2px;color:var(--muted);font-size:10px}"
+            +".item a,button{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 9px;border:0;border-radius:7px;background:var(--brand);color:#fff;text-decoration:none;font:600 11px/1.2 system-ui,-apple-system,'Segoe UI',sans-serif}"
+            +".result-summary{color:var(--muted);font-size:10px}.pagination{display:flex;justify-content:center;align-items:center;gap:12px;margin:14px 0;font-size:11px}.pagination a{color:var(--brand);font-weight:700;text-decoration:none}"
+            +".empty{padding:14px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);text-align:center}.transfer{position:fixed;z-index:5;right:14px;bottom:14px;width:min(320px,calc(100vw - 28px));padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 8px 28px #0003;font-size:11px}.transfer-heading{display:flex;justify-content:space-between;gap:10px;margin-bottom:6px}.transfer progress{width:100%;height:7px;accent-color:var(--brand)}"
             +"input:focus-visible,a:focus-visible,button:focus-visible{outline:3px solid var(--brand);outline-offset:2px}@media(min-width:1100px){.entries{grid-template-columns:repeat(auto-fit,minmax(360px,1fr))}}"
             +"@media(max-width:520px){.upload-form{grid-template-columns:1fr}.upload-form input,.upload-form button,.upload-form span{grid-column:1;grid-row:auto}}"
             +"@media(prefers-color-scheme:dark){:root{--bg:#111214;--surface:#1c1d20;--text:#f3f3f4;--muted:#aaabb0;--line:#343539;--brand:#ff8a3d}}</style></head><body><main>"+body+"</main></body></html>";
     }
-    private void html(OutputStream out,int status,String body)throws IOException{byte[] b=body.getBytes(StandardCharsets.UTF_8);String reason=switch(status){case 201->"Created";case 400->"Bad Request";case 401->"Unauthorized";case 404->"Not Found";case 409->"Conflict";case 411->"Length Required";case 500->"Internal Server Error";default->"OK";};write(out,"HTTP/1.1 "+status+" "+reason+"\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: "+b.length+"\r\nConnection: close\r\n\r\n");out.write(b);}
+    private void html(OutputStream out,int status,String body)throws IOException{byte[] b=body.getBytes(StandardCharsets.UTF_8);String reason=switch(status){case 201->"Created";case 400->"Bad Request";case 401->"Unauthorized";case 403->"Forbidden";case 404->"Not Found";case 409->"Conflict";case 411->"Length Required";case 500->"Internal Server Error";default->"OK";};write(out,"HTTP/1.1 "+status+" "+reason+"\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: "+b.length+"\r\nConnection: close\r\n\r\n");out.write(b);}
     private void redirect(OutputStream out,String where,String token)throws IOException{String cookie=token==null?"":"Set-Cookie: session="+token+"; Path=/; HttpOnly; SameSite=Strict\r\n";write(out,"HTTP/1.1 303 See Other\r\nLocation: "+where+"\r\n"+cookie+"Content-Length: 0\r\nConnection: close\r\n\r\n");}
-    private void download(OutputStream out,File file)throws IOException{String mime=Optional.ofNullable(java.net.URLConnection.guessContentTypeFromName(file.getName())).orElse("application/octet-stream");write(out,"HTTP/1.1 200 OK\r\nContent-Type: "+mime+"\r\nContent-Disposition: attachment; filename*=UTF-8''"+enc(file.getName())+"\r\nContent-Length: "+file.length()+"\r\nConnection: close\r\n\r\n");try(InputStream in=new FileInputStream(file)){byte[] buf=new byte[65536];int n;while((n=in.read(buf))!=-1){out.write(buf,0,n);lastCommunicationNanos=System.nanoTime();}}}
+    private void download(OutputStream out,File file,boolean headOnly,String rangeHeader)throws IOException{
+        InputStream fileInput;
+        try{fileInput=new BufferedInputStream(new FileInputStream(file));}
+        catch(IOException|SecurityException e){android.util.Log.w("StorageBrowser","Unable to open file for download: "+file,e);html(out,403,page("Android cannot read this file. Check the file permissions or choose another file."));return;}
+        long length;
+        try{length=file.length();}
+        catch(SecurityException e){try{fileInput.close();}catch(IOException closeError){e.addSuppressed(closeError);}android.util.Log.w("StorageBrowser","Unable to read file metadata: "+file,e);html(out,403,page("Android cannot read this file's metadata."));return;}
+        long[] range=parseRange(rangeHeader,length);
+        if(range!=null&&range.length==0){
+            try(InputStream ignored=fileInput){write(out,"HTTP/1.1 416 Range Not Satisfiable\r\nAccept-Ranges: bytes\r\nContent-Range: bytes */"+length+"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");}
+            return;
+        }
+        long start=range==null?0:range[0];
+        long responseLength=range==null?length:range[1]-range[0]+1;
+        String name=file.getName();
+        String fallback=name.replaceAll("[^A-Za-z0-9._-]","_");
+        String mime=Optional.ofNullable(java.net.URLConnection.guessContentTypeFromName(name)).orElse("application/octet-stream");
+        try(InputStream in=fileInput){
+            if(!headOnly){long skipped=0;while(skipped<start){long count=in.skip(start-skipped);if(count<=0){if(in.read()<0)throw new EOFException("File ended before the requested download range");count=1;}skipped+=count;}}
+            int status=range==null?200:206;
+            String contentRange=range==null?"":"Content-Range: bytes "+range[0]+"-"+range[1]+"/"+length+"\r\n";
+            write(out,"HTTP/1.1 "+status+(status==200?" OK":" Partial Content")+"\r\nContent-Type: "+mime+"\r\nContent-Disposition: attachment; filename=\""+fallback+"\"; filename*=UTF-8''"+enc(name)+"\r\nAccept-Ranges: bytes\r\n"+contentRange+"Content-Length: "+responseLength+"\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n");
+            if(headOnly){out.flush();return;}
+            byte[] buffer=new byte[65536];long remaining=responseLength;
+            while(remaining>0){int count=in.read(buffer,0,(int)Math.min(buffer.length,remaining));if(count<0)throw new EOFException("File ended before the advertised download length");out.write(buffer,0,count);remaining-=count;lastCommunicationNanos=System.nanoTime();}
+            out.flush();
+        }catch(IOException e){android.util.Log.e("StorageBrowser","File download failed: "+file,e);throw e;}
+    }
+    private long[] parseRange(String header,long length){
+        if(header==null||!header.regionMatches(true,0,"bytes=",0,6))return null;
+        String value=header.substring(6).trim();
+        if(value.isEmpty()||value.contains(","))return null;
+        int dash=value.indexOf('-');
+        if(dash<0||dash!=value.lastIndexOf('-'))return null;
+        try{
+            String first=value.substring(0,dash).trim(),last=value.substring(dash+1).trim();
+            if(first.isEmpty()){
+                long suffix=Long.parseLong(last);
+                if(suffix<=0||length==0)return new long[0];
+                return new long[]{Math.max(0,length-suffix),length-1};
+            }
+            long start=Long.parseLong(first);
+            if(start<0||start>=length)return new long[0];
+            long end=last.isEmpty()?length-1:Long.parseLong(last);
+            if(end<start)return new long[0];
+            return new long[]{start,Math.min(end,length-1)};
+        }catch(NumberFormatException e){return null;}
+    }
     private Map<String,String> query(String raw){Map<String,String> m=new HashMap<>();if(raw==null)return m;for(String p:raw.split("&")){int x=p.indexOf('=');String k=x<0?p:p.substring(0,x),v=x<0?"":p.substring(x+1);m.put(URLDecoder.decode(k,StandardCharsets.UTF_8),URLDecoder.decode(v,StandardCharsets.UTF_8));}return m;}
     private byte[] readFully(InputStream in,int length)throws IOException{byte[] data=new byte[length];int offset=0;while(offset<length){int count=in.read(data,offset,length-offset);if(count<0)break;offset+=count;}return offset==length?data:Arrays.copyOf(data,offset);}
     private String enc(String s){return URLEncoder.encode(s==null?"":s,StandardCharsets.UTF_8).replace("+","%20");}
