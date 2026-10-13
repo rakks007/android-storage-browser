@@ -65,8 +65,8 @@ public class HttpFileServer {
         if(name.isEmpty()||name.equals(".")||name.equals("..")||name.contains("/")||name.contains("\\")||name.indexOf('\0')>=0||(name.startsWith(".storage-browser-")&&name.endsWith(".upload"))){html(out,400,page("Invalid or reserved file name"));return;}
         if(length<0){html(out,411,page("Content length is required"));return;}
         File destination=new File(dir,name);
-        File allowedRoot=storageRootForPath(current);
-        if(allowedRoot==null||!destination.getCanonicalPath().startsWith(allowedRoot.getCanonicalPath()+File.separator)){html(out,400,page("Invalid file name"));return;}
+        StorageRoot allowedRoot=storageRootForPath(current);
+        if(allowedRoot==null||!destination.getCanonicalPath().startsWith(allowedRoot.directory.getCanonicalPath()+File.separator)){html(out,400,page("Invalid file name"));return;}
         if(destination.exists()){html(out,409,page("A file with that name already exists"));return;}
         File temporary;
         try{temporary=File.createTempFile(".storage-browser-", ".upload", dir);}
