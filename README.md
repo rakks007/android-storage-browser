@@ -1,6 +1,6 @@
 # Android Native Storage Browser
 
-A native Java Android app. It uses Android's Storage Access Framework, so the user explicitly selects the folder to share. The app runs a PIN-protected local HTTP server and shows a persistent foreground-service notification while sharing.
+A native Java Android app (version 1.1.0). It browses shared internal storage without requiring the user to select or grant access to a folder. On Android 11 and later, Android settings must grant the app all-files access. The app runs a PIN-protected local HTTP server and shows a persistent foreground-service notification while sharing. The interface follows the device's light or dark appearance, including Redmi/Xiaomi system themes.
 
 ## Build in Android Studio
 
@@ -12,16 +12,16 @@ A native Java Android app. It uses Android's Storage Access Framework, so the us
 
 ## Use
 
-1. Open the app and tap **Select shared folder**.
-2. Select Internal storage, Download, DCIM, a supported SD-card folder, or another folder offered by Android's system picker.
-3. Tap **Start sharing**.
-4. Keep the phone and receiving device on the same trusted Wi-Fi.
-5. Open the displayed URL and enter the displayed PIN.
-6. Tap **Stop sharing** when finished.
+1. Open the app and tap **Start sharing storage**.
+2. On Android 11 and later, enable **Allow access to manage all files** in Android settings and return to the app.
+3. Keep the phone and receiving device on the same trusted Wi-Fi.
+4. Open the displayed URL and enter the displayed PIN.
+5. Tap **Stop sharing** when finished.
 
 ## Limitations
 
-- Android app-private folders remain unavailable without root.
+- Android continues to restrict certain protected system and app-private folders; apps cannot override those OS restrictions.
+- Android 10 does not provide this app's broad-storage-access flow; use Android 11 or later for full shared-storage browsing.
 - This version is download/read-only in the browser. It does not upload or delete files.
 - It uses HTTP, not HTTPS; use only on trusted Wi-Fi.
 - Android may impose foreground-service time limits. Restart sharing when required.

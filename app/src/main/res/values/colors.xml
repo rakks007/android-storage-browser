@@ -1,1 +1,10 @@
-<resources><color name="blue">#087BEA</color><color name="white">#FFFFFF</color></resources>
+<resources>
+    <color name="brand">#FF6900</color>
+    <color name="screen_background">#F5F5F7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_primary">#202124</color>
+    <color name="text_secondary">#686B73</color>
+    <color name="divider">#E6E6EA</color>
+    <color name="button_secondary">#EEEEF1</color>
+    <color name="button_text">#202124</color>
+</resources>
