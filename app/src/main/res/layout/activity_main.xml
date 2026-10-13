@@ -74,7 +74,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
-                android:text="Start sharing to connect from your browser."
+                android:text="Sharing automatically stops after 10 minutes without browser activity."
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -147,11 +147,21 @@
                 android:id="@+id/pinText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="PIN will appear while sharing is active."
+                android:text="A fresh server PIN is generated when sharing starts."
                 android:textColor="@color/brand"
                 android:textIsSelectable="true"
                 android:textSize="20sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/fingerprintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Certificate fingerprint will appear while sharing is active."
+                android:textColor="@color/text_secondary"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <TextView
@@ -159,7 +169,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:lineSpacingExtra="3dp"
-            android:text="Access is limited by Android's storage protections. Use only on trusted Wi-Fi: the connection uses HTTP and anyone with the PIN can browse accessible storage while sharing is active."
+            android:text="Access is limited by Android's storage protections. The connection is encrypted with TLS, but uses a self-signed certificate that browsers may warn about. Verify the SHA-256 certificate fingerprint shown above. Anyone with the current PIN can browse, download, and upload files while sharing is active."
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
     </LinearLayout>

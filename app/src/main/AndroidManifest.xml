@@ -11,9 +11,10 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="Storage Browser"
-        android:theme="@style/Theme.StorageBrowser"
-        android:usesCleartextTraffic="true">
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.StorageBrowser">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
